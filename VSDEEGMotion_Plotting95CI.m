@@ -1,18 +1,18 @@
 clc;
 
-%% Reading Samples
+%% Define Directory and Files
 DatasetFold = ['Z:\VSD_EEG_motion\Data\Participant_EEG_data\P12 Analysis\P12 DiffWaves\'];
 
 Filenames ={'NinetyFiveGrandAverageP1-12DiffWavesTA-NTA_Raw_Data.mat','NinetyFiveGrandAverageP1-12DiffWavesTA-NTA_Sum_Upper_Limit_Diff_Waves_TA-NTA.mat','NinetyFiveGrandAverageP1-12DiffWavesTA-NTA_Diff._Waves_Lower_Limit_Diff_Waves_TA-NTA.mat';
             'NinetyFiveGrandAverageP1-12DiffWavesTS-NTS_Raw_Data.mat','NinetyFiveGrandAverageP1-12DiffWavesTS-NTS_Sum_Upper_Limit_Diff_Waves_TS-NTS.mat','NinetyFiveGrandAverageP1-12DiffWavesTS-NTS_Diff._Waves_Lower_Limit_Diff_Waves_TS-NTS.mat'};
   
-%% Excel of ERPs per sheet for all electrodes
+%% Import Files into PtSegments
 Paradigms = {'TA-NTA', 'TS-NTS'};
-StimulousStart = 0.2; % Stimulus start time seconds
+BaselineDuration = 0.2; % Baseline correction (in seconds)
 PtSegments = {};
 
 for i = 1:length(Paradigms)
-    for j = 1:3 %j = 1 -> Upperlimit, j=2 -> Lowerlimit, j=3 -> GrandAverage
+    for j = 1:3 %j = 1 -> GrandAverage, j=2 -> Upperlimit, j=3 -> Lowerlimit
         
         tmpfileAdd = [DatasetFold Filenames{i,j}];
         [PtSegments{i,j}, Labels, Fs, ChannInfo] = ImportingBCIData(tmpfileAdd);
@@ -23,7 +23,7 @@ end
 ymin = -10; %Sets cutoff on y-axis of plot
 ymax = 10;
 
-xlabelmin = -200; %Does not trim plot only relabels x-axis. The program plots all x values using the range defined within brainvision when you do the segmentation transformation.
+xlabelmin = -200; %Does not trim plot only re-labels x-axis. The program plots all x values using the range defined within brainvision when you do the segmentation transformation.
 xlabelmax = 1000; %!!!Set the x label values to the segmentation values from brainvision!!!
 
 ElectrodesOfInterest = {'P3','P4','P7','P8','PZ','OZ','O1','O2'};
@@ -45,9 +45,9 @@ for i = 1:length(ElectrodesNum)
     ElectrodeLabel = ChannInfo(ElectrodIdx).Name;
 
     figure
-    Plot95CIAll(PtSegments, Paradigms, ElectrodIdx, ElectrodeLabel, StimulousStart, Fs, ymin, ymax, xlabelmin, xlabelmax)
+    Plot95CIAll(PtSegments, Paradigms, ElectrodIdx, ElectrodeLabel, BaselineDuration, Fs, ymin, ymax, xlabelmin, xlabelmax)
     set(gcf, 'Position', get(0, 'Screensize'))
-    print(gcf, '-dtiff', '-r300', [ElectrodeLabel '-GrandAverages-95CIplot.tiff']);
+    print(gcf, '-dtiff', '-r300', [ElectrodeLabel '-GrandAverages-95CIplot.tiff']); %Saves file to directory from which code is being run
     close all force
 end
 
@@ -73,27 +73,19 @@ function [Segments, Labels, Fs, ChannInfo] = ImportingBCIData(Filename)
     Segments(:,33:end,:) = [];
 end
 
-
-%Plot 95% CI
-function [] = Plot95CIAll(PtSegments,Paradigms,ElectrodIdx,ElectrodeLabel, StimulousStart,Fs, ymin, ymax, xlabelmin, xlabelmax)
-    FaceAlphaVal = 0.1;
-    
-    plot(squeeze(PtSegments{1,1}(1,ElectrodIdx,:)),'k') %Paradigm 1's line color (k = black)
-    hold on
-    plot(squeeze(PtSegments{2,1}(1,ElectrodIdx,:)),'r') %Paradigm 2's line color (r = red)
-%    plot(squeeze(PtSegments{3,1}(1,ElectrodIdx,:)),'b')
-%     legend(Paradigms)
-
-    GrandAverage = squeeze(PtSegments{1,1});
+function [] = Plot95CIAll(PtSegments,Paradigms,ElectrodIdx,ElectrodeLabel, BaselineDuration,Fs, ymin, ymax, xlabelmin, xlabelmax)
+    FaceAlphaVal = 0.1; %Transparency
+     
+    GrandAverage = squeeze(PtSegments{1,1}); %This block prepares the shaded region for paradigm 1
     Upperlimit = squeeze(PtSegments{1,2});
     Lowerlimit = squeeze(PtSegments{1,3});
 
     t = 1:size(GrandAverage,2); % where t is the number of data points
     plot(t, GrandAverage(ElectrodIdx,:),'k','LineWidth',5)  %Number after 'LineWidth' is the line width of the grandaverage plot                                                                
     hold on
-    patch([t, fliplr(t)], [Upperlimit(ElectrodIdx,:), fliplr(Lowerlimit(ElectrodIdx,:))], 'k', 'EdgeColor', 'none', 'FaceAlpha',FaceAlphaVal)
+    patch([t, fliplr(t)], [Upperlimit(ElectrodIdx,:), fliplr(Lowerlimit(ElectrodIdx,:))], 'k', 'EdgeColor', 'none', 'FaceAlpha',FaceAlphaVal) %Uses upper and lower limits to add shaded region
 
-    GrandAverage = squeeze(PtSegments{2,1});
+    GrandAverage = squeeze(PtSegments{2,1}); %This block prepares the shaded region for paradigm 2
     Upperlimit = squeeze(PtSegments{2,2});
     Lowerlimit = squeeze(PtSegments{2,3});
 
@@ -101,23 +93,25 @@ function [] = Plot95CIAll(PtSegments,Paradigms,ElectrodIdx,ElectrodeLabel, Stimu
     hold on
     patch([t, fliplr(t)], [Upperlimit(ElectrodIdx,:), fliplr(Lowerlimit(ElectrodIdx,:))], 'r', 'EdgeColor', 'none', 'FaceAlpha',FaceAlphaVal)
 
-%    GrandAverage = squeeze(PtSegments{3,1});
-%    Upperlimit = squeeze(PtSegments{3,2});
-%    Lowerlimit = squeeze(PtSegments{3,3});
+    if length(Paradigms) == 3 %Triggered to be used with 3 paradigms
+        GrandAverage = squeeze(PtSegments{3,1});
+        Upperlimit = squeeze(PtSegments{3,2});
+        Lowerlimit = squeeze(PtSegments{3,3});
 
-%    plot(t, GrandAverage(ElectrodIdx,:),'b','LineWidth',3)                                                                  
-%    hold on
-%    patch([t, fliplr(t)], [Upperlimit(ElectrodIdx,:), fliplr(Lowerlimit(ElectrodIdx,:))], 'b', 'EdgeColor', 'none', 'FaceAlpha',FaceAlphaVal)
-
+        plot(t, GrandAverage(ElectrodIdx,:),'b','LineWidth',3)                                                                  
+        hold on
+        patch([t, fliplr(t)], [Upperlimit(ElectrodIdx,:), fliplr(Lowerlimit(ElectrodIdx,:))], 'b', 'EdgeColor', 'none', 'FaceAlpha',FaceAlphaVal)
+        %legend(Paradigms) %Uncommnet to add a legend
+    end
+    
     ylim([ymin ymax])
     line([0 size(GrandAverage,2)],[0 0],'Color','k','LineStyle',':')
     tmpylim = get(gca,'ylim');
-    line([StimulousStart*Fs StimulousStart*Fs],[tmpylim(1) tmpylim(2)],'Color','k','LineStyle',':')
+    line([BaselineDuration*Fs BaselineDuration*Fs],[tmpylim(1) tmpylim(2)],'Color','k','LineStyle',':') %Adds dashed lines at 0
 
-%     legend(Paradigms)
-    xlabel('Time (ms)', 'fontweight', 'bold', 'fontsize', 16)
-    ylabel('Amlitude (\muV)','Interpreter','tex', 'fontweight', 'bold', 'fontsize', 16)
-%     title(['Grand Average of ', ElectrodeLabel]);
-    set(gca,'XTick',[1 StimulousStart*Fs:StimulousStart*Fs:length(t)], 'XTickLabel',linspace(xlabelmin,xlabelmax,(((length(t)-StimulousStart*Fs)/(StimulousStart*Fs))+2)), 'FontWeight', 'bold', 'fontsize', 14)
+    xlabel('Time (ms)', 'fontweight', 'bold', 'fontsize', 16) %Font for x-axis label
+    ylabel('Amlitude (\muV)','Interpreter','tex', 'fontweight', 'bold', 'fontsize', 16) %Font for y-axis label
+%     title(['Grand Average of ', ElectrodeLabel]); %Uncomment to add title to the plot
+    set(gca,'XTick',[1 BaselineDuration*Fs:BaselineDuration*Fs:length(t)], 'XTickLabel',linspace(xlabelmin,xlabelmax,(((length(t)-BaselineDuration*Fs)/(BaselineDuration*Fs))+2)), 'FontWeight', 'bold', 'fontsize', 14) %Font for numbers on axes
 
 end
